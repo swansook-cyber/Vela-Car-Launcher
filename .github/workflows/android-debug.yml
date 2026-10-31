@@ -1,7 +1,7 @@
 name: Android Debug Build
 on:
   push:
-    branches: [develop/v0.1-automotive-dashboard]
+    branches: [develop/v0.1-automotive-dashboard, feature/v1-premium-automotive-dashboard]
   workflow_dispatch:
 jobs:
   build:
@@ -27,10 +27,35 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Assemble debug prototype
-        run: gradle :app:assembleDebug --no-daemon --stacktrace
+      - name: Unit tests and debug APK
+        run: gradle :app:testDebugUnitTest :app:assembleDebug --no-daemon --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: vela-car-v0.1-debug-internal-only
+          name: vela-car-v1-debug-internal-only
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+      - name: Build signed release when permanent credentials exist
+        id: release
+        shell: bash
+        env:
+          VELA_RELEASE_JKS_BASE64: ${{ secrets.VELA_RELEASE_JKS_BASE64 }}
+          VELA_STORE_PASSWORD: ${{ secrets.VELA_STORE_PASSWORD }}
+          VELA_KEY_PASSWORD: ${{ secrets.VELA_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$VELA_RELEASE_JKS_BASE64" || -z "$VELA_STORE_PASSWORD" || -z "$VELA_KEY_PASSWORD" ]]; then
+            echo 'Permanent signing credentials absent; release signing skipped.'
+            exit 0
+          fi
+          export VELA_KEYSTORE_PATH="$RUNNER_TEMP/vela-release.jks"
+          printf '%s' "$VELA_RELEASE_JKS_BASE64" | base64 --decode > "$VELA_KEYSTORE_PATH"
+          keytool -list -keystore "$VELA_KEYSTORE_PATH" -storepass "$VELA_STORE_PASSWORD" -alias vela-store >/dev/null
+          gradle :app:assembleRelease --no-daemon --stacktrace
+          test -s app/build/outputs/apk/release/app-release.apk
+          echo 'signed=true' >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: ${{ steps.release.outputs.signed == 'true' }}
+        with:
+          name: vela-car-v1-release-signed-not-published
+          path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
