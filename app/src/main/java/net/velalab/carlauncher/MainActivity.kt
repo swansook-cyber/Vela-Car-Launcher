@@ -4,6 +4,10 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.Bundle
+import android.content.Intent
+import android.net.Uri
+import android.os.SystemClock
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -48,11 +52,16 @@ private fun Dashboard(gpsPermissionGranted: Boolean, onRequestGps: () -> Unit) {
     var driving by remember { mutableStateOf(prefs.getBoolean("driving", true)) }
     val locationManager = remember { context.getSystemService(LocationManager::class.java) }
     var gpsSpeed by remember { mutableStateOf<Float?>(null) }
+    var lastGpsElapsed by remember { mutableLongStateOf(0L) }
+    var gpsStatus by remember { mutableStateOf("Waiting for GPS") }
+    val configuration = LocalConfiguration.current
     DisposableEffect(gpsPermissionGranted) {
         if (!gpsPermissionGranted) onDispose { }
         else {
             val listener = android.location.LocationListener { loc ->
-                gpsSpeed = if (loc.hasSpeed() && loc.accuracy <= 80f) loc.speed * 3.6f else null
+                gpsSpeed = if (loc.hasSpeed() && loc.hasAccuracy() && loc.accuracy <= 80f) (loc.speed * 3.6f).coerceAtLeast(0f) else null
+                lastGpsElapsed = SystemClock.elapsedRealtime()
+                gpsStatus = if (gpsSpeed == null) "GPS speed unavailable" else "GPS SPEED"
             }
             try { locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, listener) } catch (_: Exception) { }
             onDispose { locationManager.removeUpdates(listener) }
@@ -85,15 +94,13 @@ private fun Dashboard(gpsPermissionGranted: Boolean, onRequestGps: () -> Unit) {
                 Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1.55f).fillMaxHeight().background(panel, RoundedCornerShape(22.dp)).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                         if (driving) {
-                            Text(if (gpsSpeed == null) "—" else String.format(Locale.US, "%.0f", gpsSpeed), color = Color.White, fontSize = 94.sp, fontWeight = FontWeight.Bold)
-                            Text("km/h", color = blue, fontSize = 26.sp)
-                            Spacer(Modifier.height(8.dp))
-                            Text(if (!gpsPermissionGranted) "GPS permission required" else if (gpsSpeed == null) "Waiting for GPS speed" else "GPS SPEED", color = Color.LightGray)
+                            GpsSpeedometer(gpsSpeed, if (!gpsPermissionGranted) "GPS permission required" else gpsStatus, Modifier.fillMaxWidth().weight(1f))
                             if (!gpsPermissionGranted) TextButton(onClick = onRequestGps) { Text("Allow GPS") }
                         } else {
                             Icon(Icons.Default.Navigation, null, tint = blue, modifier = Modifier.size(70.dp))
                             Text("Navigation Mode", color = Color.White, fontSize = 26.sp)
-                            Text("Navigation app integration pending", color = Color.LightGray, textAlign = TextAlign.Center)
+                            Text("Open Maps for turn-by-turn navigation", color = Color.LightGray, textAlign = TextAlign.Center)
+                            Button(onClick = { try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=Krabi")).setPackage("com.google.android.apps.maps")) } catch (_: Exception) { try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=Krabi"))) } catch (_: Exception) { } } }) { Text("Open Maps") }
                         }
                     }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
