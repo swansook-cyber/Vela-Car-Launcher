@@ -100,7 +100,7 @@ private fun Dashboard(gpsPermissionGranted: Boolean, onRequestGps: () -> Unit) {
                             Icon(Icons.Default.Navigation, null, tint = blue, modifier = Modifier.size(70.dp))
                             Text("Navigation Mode", color = Color.White, fontSize = 26.sp)
                             Text("Open Maps for turn-by-turn navigation", color = Color.LightGray, textAlign = TextAlign.Center)
-                            Button(onClick = { try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=Krabi")).setPackage("com.google.android.apps.maps")) } catch (_: Exception) { try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=Krabi"))) } catch (_: Exception) { } } }) { Text("Open Maps") }
+                            Button(onClick = { try { val maps = context.packageManager.getLaunchIntentForPackage("com.google.android.apps.maps"); if (maps != null) context.startActivity(maps) else context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0"))) } catch (_: Exception) { } }) { Text("Open Maps") }
                         }
                     }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
