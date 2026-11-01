@@ -1,7 +1,7 @@
 name: Android Debug Build
 on:
   push:
-    branches: [develop/v0.1-automotive-dashboard, feature/v1-premium-automotive-dashboard]
+    branches: [develop/v0.1-automotive-dashboard, feature/v1-premium-automotive-dashboard, fix/v1.0.1-headunit-compatibility]
   workflow_dispatch:
 jobs:
   build:
@@ -29,9 +29,21 @@ jobs:
           gradle-version: '8.9'
       - name: Unit tests and debug APK
         run: gradle :app:testDebugUnitTest :app:assembleDebug --no-daemon --stacktrace
+      - name: Inspect APK metadata and signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          echo "APK SHA-256:"
+          sha256sum "$APK"
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          "$BUILD_TOOLS/aapt" dump badging "$APK" | head -n 18
+          "$BUILD_TOOLS/zipalign" -c -v 4 "$APK"
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
       - uses: actions/upload-artifact@v4
         with:
-          name: vela-car-v1-debug-internal-only
+          name: vela-car-v1.0.1-headunit-compat-debug
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
       - name: Build signed release when permanent credentials exist
